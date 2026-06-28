@@ -244,9 +244,22 @@ If you want to override the optional settings, here is the same block with **eve
 
 ## Hiding or limiting which devices appear
 
-By default every supported Vera device is exposed to HomeKit. To hide some (or expose only a chosen few), you reference each device by its **Vera device number**.
+By default every supported Vera device is exposed to HomeKit. There are two ways to hide the ones you don't want.
 
-### Step 1 — find a device's number
+### Easiest: the device picker (Config UI X)
+
+If you use Homebridge Config UI X, open the plugin's **Settings** — at the top you'll see a **Vera devices** panel listing every discovered device with a **Show** checkbox, its type, Vera ID and room:
+
+- Click **Load devices** (it reads the host you've set), then **untick** any device you want to hide. Use the filter box or **Show all / Hide all** for bulk changes.
+- Click **Save** at the bottom of the window and restart Homebridge. Unticked devices are removed from HomeKit.
+
+That's it — no need to look up numbers by hand. (The picker manages the `excludeDeviceIds` list for you.)
+
+### Manual: by device number
+
+If you don't use Config UI X, reference each device by its **Vera device number**.
+
+#### Step 1 — find a device's number
 
 There is no separate device list in the settings form; the plugin prints one to the **log** every time it starts. Two easy ways to find a number:
 
@@ -260,7 +273,7 @@ There is no separate device list in the settings form; the plugin prints one to 
    The number in `(Vera device N)` is what you use below. This is your full device inventory.
 2. **Apple Home app.** Open the accessory → **Settings** (gear) → scroll to **Serial Number**. It is shown as `vera-<number>` (e.g. `vera-31`).
 
-### Step 2 — hide the ones you don't want
+#### Step 2 — hide the ones you don't want
 
 In the plugin settings, under **Exposed accessories → Exclude these device IDs**, click **+ Add**, type each number, and **Save**. Or edit `config.json` directly:
 

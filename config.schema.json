@@ -2,6 +2,7 @@
   "pluginAlias": "Vera2",
   "pluginType": "platform",
   "singular": true,
+  "customUi": true,
   "strictValidation": true,
   "headerDisplay": "Connects Homebridge to a Vera (MiCasaVerde / Ezlo) controller over the local Luup HTTP API. Local-network access only — no cloud account required.",
   "footerDisplay": "For help and the device-type support matrix see the [README](https://github.com/mckdevnull/homebridge-vera2#readme).",

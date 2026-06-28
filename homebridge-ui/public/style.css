@@ -1,0 +1,126 @@
+/* Styling for the Vera device picker. Kept theme-friendly (inherits Config UI X
+   colours where possible) so it looks right in both light and dark modes. */
+
+#vera-ui {
+  margin-bottom: 1rem;
+}
+
+.vera-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.vera-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.vera-sub {
+  font-size: 0.8rem;
+  opacity: 0.75;
+  margin-top: 0.15rem;
+  max-width: 46rem;
+}
+
+.vera-status {
+  font-size: 0.85rem;
+  opacity: 0.85;
+  margin: 0.35rem 0;
+}
+
+.vera-warning {
+  font-size: 0.85rem;
+  border: 1px solid rgba(240, 173, 78, 0.6);
+  background: rgba(240, 173, 78, 0.12);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  margin: 0.35rem 0;
+}
+
+.vera-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+.vera-toolbar .form-control {
+  max-width: 16rem;
+}
+
+.vera-count {
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.vera-spacer {
+  flex: 1 1 auto;
+}
+
+.vera-table-wrap {
+  max-height: 22rem;
+  overflow: auto;
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  border-radius: 6px;
+}
+
+.vera-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.vera-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--bs-body-bg, #fff);
+  text-align: left;
+  font-weight: 600;
+  padding: 0.45rem 0.6rem;
+  border-bottom: 2px solid rgba(128, 128, 128, 0.25);
+  z-index: 1;
+}
+
+.vera-table tbody td {
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.15);
+}
+
+.vera-table tbody tr:hover {
+  background: rgba(128, 128, 128, 0.08);
+}
+
+.vera-col-show {
+  width: 3.5rem;
+  text-align: center;
+}
+
+.vera-col-show input {
+  transform: scale(1.2);
+  cursor: pointer;
+}
+
+.vera-col-id {
+  width: 5rem;
+}
+
+.vera-id {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+
+.vera-hidden-row {
+  opacity: 0.45;
+}
+
+.vera-hidden-row td:not(.vera-col-show) {
+  text-decoration: line-through;
+}
+
+.vera-divider {
+  margin: 1.25rem 0;
+  opacity: 0.4;
+}

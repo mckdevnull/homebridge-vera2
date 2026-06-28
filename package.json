@@ -31,6 +31,7 @@
   },
   "files": [
     "dist",
+    "homebridge-ui",
     "config.schema.json",
     "LICENSE",
     "README.md"
@@ -44,7 +45,9 @@
     "watch": "tsc --watch",
     "prepublishOnly": "npm run lint && npm run test && npm run build"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@homebridge/plugin-ui-utils": "^2.0.1"
+  },
   "devDependencies": {
     "@types/node": "^24.0.0",
     "@vitest/coverage-v8": "^3.0.0",

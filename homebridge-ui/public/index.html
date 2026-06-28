@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="vera-ui">
+      <div class="vera-header">
+        <div>
+          <div class="vera-title">Vera devices</div>
+          <div class="vera-sub">
+            Untick a device to hide it from HomeKit. Click <strong>Save</strong> (bottom of this window) and
+            restart Homebridge to apply.
+          </div>
+        </div>
+        <button id="vera-refresh" type="button" class="btn btn-primary btn-sm">Load devices</button>
+      </div>
+
+      <div id="vera-warning" class="vera-warning" hidden></div>
+      <div id="vera-status" class="vera-status">Enter your Vera host/IP below, then click “Load devices”.</div>
+
+      <div id="vera-toolbar" class="vera-toolbar" hidden>
+        <input id="vera-search" type="text" placeholder="Filter by name…" class="form-control form-control-sm" />
+        <span class="vera-count" id="vera-count"></span>
+        <span class="vera-spacer"></span>
+        <button id="vera-all" type="button" class="btn btn-secondary btn-sm">Show all</button>
+        <button id="vera-none" type="button" class="btn btn-secondary btn-sm">Hide all</button>
+      </div>
+
+      <div class="vera-table-wrap">
+        <table id="vera-table" class="vera-table" hidden>
+          <thead>
+            <tr>
+              <th class="vera-col-show">Show</th>
+              <th>Name</th>
+              <th>Type</th>
+              <th class="vera-col-id">Vera&nbsp;ID</th>
+              <th>Room</th>
+            </tr>
+          </thead>
+          <tbody id="vera-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <hr class="vera-divider" />
+
+    <script src="ui.js"></script>
+  </body>
+</html>

@@ -31,6 +31,11 @@ export declare class LuupBackend extends TypedEmitter<BackendEventMap> implement
     get temperatureUnit(): 'C' | 'F';
     start(): Promise<void>;
     stop(): Promise<void>;
+    /**
+     * One-shot discovery WITHOUT starting the update loop. Used by the config UI to
+     * list devices; leaves no background work or timers running afterwards.
+     */
+    probe(): Promise<void>;
     getDevices(): NormalizedDevice[];
     getScenes(): NormalizedScene[];
     getHouseMode(): HouseModeValue | undefined;

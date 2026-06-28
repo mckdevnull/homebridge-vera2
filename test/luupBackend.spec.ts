@@ -199,6 +199,22 @@ describe('LuupBackend commands', () => {
   });
 });
 
+describe('LuupBackend.probe', () => {
+  it('discovers devices for the config UI without starting the poll loop', async () => {
+    const fetchMock = installFetch();
+    const backend = makeBackend();
+    await backend.probe();
+
+    expect(backend.getDevices().length).toBe(5);
+    expect(backend.getScenes()).toHaveLength(1);
+
+    // probe() must not start the long-poll: no status request carries a DataVersion.
+    const polled = fetchMock.mock.calls.some((c) => String(c[0]).includes('DataVersion'));
+    expect(polled).toBe(false);
+    await backend.stop();
+  });
+});
+
 describe('LuupBackend.refreshDevice', () => {
   it('refreshes a single device and emits a state patch', async () => {
     installFetch();

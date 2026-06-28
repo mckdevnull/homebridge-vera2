@@ -70,6 +70,13 @@ export class LuupBackend extends TypedEmitter {
         this.#running = false;
         this.#stopController.abort();
     }
+    /**
+     * One-shot discovery WITHOUT starting the update loop. Used by the config UI to
+     * list devices; leaves no background work or timers running afterwards.
+     */
+    async probe() {
+        await this.discover();
+    }
     getDevices() {
         return [...this.#devices.values()];
     }

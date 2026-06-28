@@ -71,6 +71,13 @@ index.ts → platform.ts (DynamicPlatformPlugin) → factory.ts → accessories/
 - **No ESLint config file is committed** — a global config-protection hook blocks creating
   `eslint.config.*`. `npm run lint` is `tsc --noEmit`. ESLint deps are present so a flat config
   can be added later when that hook is disabled.
+- **Config UI X custom UI** lives in `homebridge-ui/` (`server.js` + `public/`), enabled by
+  `"customUi": true` in `config.schema.json`. The server reuses `LuupBackend.probe()` (one-shot
+  discovery, no poll loop) to list devices; the page (`public/ui.js`) renders show/hide toggles
+  that write `excludeDeviceIds`. This is the ONLY runtime dependency (`@homebridge/plugin-ui-utils`,
+  used by the UI server, not the Homebridge runtime). `homebridge-ui` must stay in package.json
+  `files`. The page can be visually tested via a standalone harness that stubs the `homebridge`
+  global (see the device-picker work) — it can't be driven through real Config UI X headlessly.
 
 ## Testing approach
 
