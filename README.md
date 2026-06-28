@@ -234,11 +234,56 @@ If you want to override the optional settings, here is the same block with **eve
 | `hideScenes` | `false` | No | Do not expose Vera scenes as momentary switches. |
 | `hideHouseMode` | `false` | No | Do not expose the controller House Mode as a Security System accessory. |
 | `exposeArmDisarm` | `false` | No | For armable security sensors, expose an additional switch to arm/disarm the sensor. |
-| `includeDeviceIds` | `[]` | No | If set, ONLY these Vera device numbers are exposed. Leave empty to expose all. Enter the device numbers as integers. |
-| `excludeDeviceIds` | `[]` | No | Vera device numbers to never expose. Enter the device numbers as integers. |
+| `includeDeviceIds` | `[]` | No | If set, ONLY these Vera device numbers are exposed (everything else hidden). See [Hiding or limiting which devices appear](#hiding-or-limiting-which-devices-appear). |
+| `excludeDeviceIds` | `[]` | No | Vera device numbers to hide from HomeKit. See [Hiding or limiting which devices appear](#hiding-or-limiting-which-devices-appear). |
 | `debug` | `false` | No | Verbose debug logging. |
 
 > **Which option is really required?** Only **`host`** — if it is missing or empty, the plugin will not start. Everything else, including `name`, has a working default.
+
+---
+
+## Hiding or limiting which devices appear
+
+By default every supported Vera device is exposed to HomeKit. To hide some (or expose only a chosen few), you reference each device by its **Vera device number**.
+
+### Step 1 — find a device's number
+
+There is no separate device list in the settings form; the plugin prints one to the **log** every time it starts. Two easy ways to find a number:
+
+1. **Homebridge log (recommended).** Open Config UI X → **Logs** (or `hb-service logs`) and restart the plugin. For every device you'll see a line like:
+
+   ```
+   [Vera2] Adding "Front Door" (Vera device 31) as lock
+   [Vera2] Adding "Driveway Motion" (Vera device 147) as motion-sensor
+   ```
+
+   The number in `(Vera device N)` is what you use below. This is your full device inventory.
+2. **Apple Home app.** Open the accessory → **Settings** (gear) → scroll to **Serial Number**. It is shown as `vera-<number>` (e.g. `vera-31`).
+
+### Step 2 — hide the ones you don't want
+
+In the plugin settings, under **Exposed accessories → Exclude these device IDs**, click **+ Add**, type each number, and **Save**. Or edit `config.json` directly:
+
+```json
+{
+  "platform": "Vera2",
+  "name": "Vera2",
+  "host": "192.168.1.50",
+  "excludeDeviceIds": [147, 203, 256]
+}
+```
+
+Restart Homebridge. Excluded devices are unregistered and disappear from the Home app.
+
+### Or: expose only specific devices
+
+If you'd rather start from nothing and pick a few, use **Include only these device IDs** (`includeDeviceIds`) instead. When that list is non-empty, **only** those device numbers are exposed and everything else is hidden:
+
+```json
+"includeDeviceIds": [31, 282]
+```
+
+> `includeDeviceIds` and `excludeDeviceIds` accept the Vera **device numbers** (integers). If both are set, the include list is applied first, then the exclude list.
 
 ---
 

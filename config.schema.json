@@ -75,14 +75,14 @@
       "includeDeviceIds": {
         "title": "Include only these device IDs",
         "type": "array",
-        "items": { "title": "Device ID", "type": "integer" },
-        "description": "If set, ONLY these Vera device numbers are exposed. Leave empty to expose all."
+        "items": { "title": "Vera device number", "type": "integer" },
+        "description": "If you add any numbers here, ONLY those Vera devices are exposed (everything else is hidden). Leave empty to expose all. Find a device's number in the Homebridge log line — Adding \"<name>\" (Vera device <number>) … — or in the Apple Home app under the accessory's Settings → Serial Number, shown as vera-<number>."
       },
       "excludeDeviceIds": {
         "title": "Exclude these device IDs",
         "type": "array",
-        "items": { "title": "Device ID", "type": "integer" },
-        "description": "Vera device numbers to never expose."
+        "items": { "title": "Vera device number", "type": "integer" },
+        "description": "Vera device numbers to hide from HomeKit. Click + Add, type the number, and save. Find a device's number in the Homebridge log line — Adding \"<name>\" (Vera device <number>) … — or via the accessory's Serial Number (vera-<number>) in the Apple Home app. Excluded devices are removed on the next restart."
       },
       "debug": {
         "title": "Verbose debug logging",
