@@ -32,6 +32,9 @@ export class LuupBackend extends TypedEmitter {
     #devices = new Map();
     #scenes = new Map();
     #rooms = new Map();
+    /** Every device id seen at discovery (supported AND skipped/unsupported, plus
+     * the controller) so that updates for non-exposed devices don't look "new". */
+    #knownDeviceIds = new Set();
     #temperatureUnit = 'C';
     #houseMode;
     #loadTime = 0;
@@ -100,6 +103,15 @@ export class LuupBackend extends TypedEmitter {
         this.updateHouseMode(status.Mode ?? sdata.mode);
         // Best-effort metadata (manufacturer/model/device_type) for nicer accessories.
         const meta = await this.fetchUserDataMeta();
+        // Record every device id present on the controller — supported or not — so the
+        // long-poll can tell a genuinely new device from a known but non-exposed one.
+        this.#knownDeviceIds.clear();
+        for (const dev of sdata.devices ?? []) {
+            this.#knownDeviceIds.add(toIdString(dev.id));
+        }
+        for (const sd of status.devices ?? status.Devices ?? []) {
+            this.#knownDeviceIds.add(toIdString(sd.id));
+        }
         this.#devices.clear();
         for (const dev of sdata.devices ?? []) {
             const id = toIdString(dev.id);
@@ -216,7 +228,12 @@ export class LuupBackend extends TypedEmitter {
             this.applyStatusStates(id, sd);
             const device = this.#devices.get(id);
             if (!device) {
-                needsRediscover = true;
+                // A device we don't expose (unsupported type, or the controller itself)
+                // reporting state is normal — ignore it. Only an id we've never seen at
+                // discovery means the topology actually changed.
+                if (!this.#knownDeviceIds.has(id)) {
+                    needsRediscover = true;
+                }
                 continue;
             }
             const next = this.computeState(id, device.kind);
@@ -225,7 +242,7 @@ export class LuupBackend extends TypedEmitter {
             changed = true;
         }
         if (needsRediscover) {
-            this.#log.info('Unknown device appeared in update; re-discovering.');
+            this.#log.info('A new device appeared on Vera; re-discovering.');
             await this.discover();
             this.emit('topologyChanged');
             return true;

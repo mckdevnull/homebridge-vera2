@@ -218,3 +218,135 @@ describe('LuupBackend.refreshDevice', () => {
     await backend.stop();
   });
 });
+
+describe('LuupBackend re-discovery behaviour', () => {
+  it('ignores updates for known unsupported devices (no re-discovery loop)', async () => {
+    const sdata = {
+      full: 1,
+      loadtime: 1,
+      dataversion: 2,
+      mode: '1',
+      temperature: 'C',
+      rooms: [],
+      scenes: [],
+      devices: [
+        { id: 5, name: 'Lamp', category: 3, subcategory: 1 }, // supported switch
+        { id: 99, name: 'Meter', category: 21, subcategory: 0 }, // power meter -> Unsupported
+      ],
+    };
+    const statusFull = {
+      LoadTime: 1,
+      DataVersion: 2,
+      devices: [
+        { id: 5, states: [{ service: 'urn:upnp-org:serviceId:SwitchPower1', variable: 'Status', value: '0' }] },
+        { id: 99, states: [{ service: 'urn:micasaverde-com:serviceId:EnergyMetering1', variable: 'Watts', value: '100' }] },
+      ],
+    };
+    const pollDelta = {
+      LoadTime: 1,
+      DataVersion: 3,
+      devices: [
+        { id: 99, states: [{ service: 'urn:micasaverde-com:serviceId:EnergyMetering1', variable: 'Watts', value: '200' }] },
+      ],
+    };
+    let sdataCalls = 0;
+    let polled = false;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL) => {
+        const url = new URL(String(input));
+        const id = url.searchParams.get('id');
+        if (id === 'sdata') {
+          sdataCalls++;
+          return res(JSON.stringify(sdata));
+        }
+        if (id === 'user_data') {
+          return res(JSON.stringify({ devices: [] }));
+        }
+        if (id === 'status') {
+          if (url.searchParams.has('DataVersion')) {
+            if (!polled) {
+              polled = true;
+              return res(JSON.stringify(pollDelta));
+            }
+            return res('NO_CHANGES');
+          }
+          return res(JSON.stringify(statusFull));
+        }
+        return res('');
+      }),
+    );
+
+    const backend = makeBackend();
+    const topo: number[] = [];
+    backend.on('topologyChanged', () => topo.push(1));
+    await backend.start();
+    await new Promise((r) => setTimeout(r, 60));
+
+    expect(backend.getDevices()).toHaveLength(1); // only the supported switch
+    expect(sdataCalls).toBe(1); // discovery ran once; the unsupported meter did NOT cause a re-discovery
+    expect(topo).toHaveLength(0);
+    await backend.stop();
+  });
+
+  it('re-discovers once when a genuinely new device appears', async () => {
+    let sdataCalls = 0;
+    let polled = false;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL) => {
+        const url = new URL(String(input));
+        const id = url.searchParams.get('id');
+        if (id === 'sdata') {
+          sdataCalls++;
+          const devices =
+            sdataCalls === 1
+              ? [{ id: 5, name: 'Lamp', category: 3, subcategory: 1 }]
+              : [
+                  { id: 5, name: 'Lamp', category: 3, subcategory: 1 },
+                  { id: 7, name: 'Plug', category: 3, subcategory: 1 },
+                ];
+          return res(JSON.stringify({ full: 1, loadtime: 1, dataversion: 2, temperature: 'C', rooms: [], scenes: [], devices }));
+        }
+        if (id === 'user_data') {
+          return res(JSON.stringify({ devices: [] }));
+        }
+        if (id === 'status') {
+          if (url.searchParams.has('DataVersion')) {
+            if (!polled) {
+              polled = true;
+              return res(
+                JSON.stringify({
+                  LoadTime: 1,
+                  DataVersion: 3,
+                  devices: [{ id: 7, states: [{ service: 'urn:upnp-org:serviceId:SwitchPower1', variable: 'Status', value: '1' }] }],
+                }),
+              );
+            }
+            return res('NO_CHANGES');
+          }
+          const ids = sdataCalls <= 1 ? [5] : [5, 7];
+          return res(
+            JSON.stringify({
+              LoadTime: 1,
+              DataVersion: 2,
+              devices: ids.map((n) => ({ id: n, states: [{ service: 'urn:upnp-org:serviceId:SwitchPower1', variable: 'Status', value: '0' }] })),
+            }),
+          );
+        }
+        return res('');
+      }),
+    );
+
+    const backend = makeBackend();
+    const topo: number[] = [];
+    backend.on('topologyChanged', () => topo.push(1));
+    await backend.start();
+    await new Promise((r) => setTimeout(r, 80));
+
+    expect(sdataCalls).toBeGreaterThanOrEqual(2); // re-discovered after the new device appeared
+    expect(topo.length).toBeGreaterThanOrEqual(1);
+    expect(backend.getDevices().map((d) => d.id).sort()).toEqual(['5', '7']);
+    await backend.stop();
+  });
+});
