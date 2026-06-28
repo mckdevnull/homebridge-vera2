@@ -415,6 +415,16 @@ npm install -g git+https://github.com/mckdevnull/homebridge-vera2.git
 - A temporarily offline battery device or a slow controller can cause this. If it's transient, it often clears on its own once the device reports again.
 - If it persists, try increasing `requestTimeoutSeconds` (default `10`, max `60`) so slow controllers have more time to respond.
 
+### Config UI X logs `[HapClient] Failed to refresh characteristics … ECONNREFUSED …:<port>`
+
+These come from **Config UI X's dashboard**, which connects to each bridge's HAP port to show live values — they do **not** affect whether your devices work (if they appear and respond in the Apple Home app, they're fine). The plugin does not open or manage that port; Homebridge/Config UI X does.
+
+`ECONNREFUSED` to a **child bridge** port means the UI couldn't reach that bridge at that moment. Things to try:
+
+- **Update and fully restart.** `cd` to your clone, `git pull && npm install`, then fully restart Homebridge (not just the plugin). Recent versions harden the plugin against any error that could briefly restart the child-bridge process.
+- **Check for a restarting child bridge.** In the log, if you see `[Vera2] Launched child bridge …` repeating, the bridge is restarting — capture the lines just before each restart (set `"debug": true`) so the cause can be fixed.
+- **Or run in the main bridge.** Turn off **Use Child Bridge** for Vera2 so it runs in the main bridge, which Config UI X reaches natively. (Note: this re-pairs these accessories under the main bridge in Apple Home.)
+
 ### A device maps to the wrong HomeKit type
 
 - Mapping is based on the Vera device's category/subcategory (see the [Supported devices](#supported-devices) table). For example, a switch with `fan` in its device type is exposed as a Fan, and an unknown security sensor falls back to a Contact Sensor.

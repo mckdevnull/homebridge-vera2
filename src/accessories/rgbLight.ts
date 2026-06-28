@@ -90,7 +90,9 @@ export class RgbLightAccessory extends VeraDeviceAccessory {
       clearTimeout(this.colorTimer);
     }
     this.colorTimer = setTimeout(() => {
-      void this.applyColor();
+      // Never let a failed colour write become an unhandled rejection (which
+      // would crash the bridge process).
+      this.applyColor().catch((err) => this.log.debug(`Colour update failed: ${(err as Error).message}`));
     }, 60);
   }
 

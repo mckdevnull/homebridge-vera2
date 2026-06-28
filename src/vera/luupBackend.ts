@@ -145,7 +145,9 @@ export class LuupBackend extends TypedEmitter<BackendEventMap> implements VeraBa
     this.emit('ready');
     this.emit('connection', true);
     this.#running = true;
-    void this.pollLoop();
+    // The loop catches its own per-iteration errors; this guard is a final
+    // backstop so it can never surface as an unhandled rejection / crash.
+    this.pollLoop().catch((err) => this.#log.error(`Vera update loop stopped unexpectedly: ${(err as Error).message}`));
   }
 
   async stop(): Promise<void> {

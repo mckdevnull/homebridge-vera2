@@ -33,10 +33,13 @@ export class SceneAccessory extends AccessoryBase {
         if (this.offTimer) {
           clearTimeout(this.offTimer);
         }
-        this.offTimer = setTimeout(
-          () => this.service.updateCharacteristic(this.Characteristic.On, false),
-          800,
-        );
+        this.offTimer = setTimeout(() => {
+          try {
+            this.service.updateCharacteristic(this.Characteristic.On, false);
+          } catch {
+            /* ignore — never throw from a timer callback */
+          }
+        }, 800);
       });
   }
 }

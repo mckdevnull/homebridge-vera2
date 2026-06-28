@@ -75,7 +75,12 @@ export class VeraHomebridgePlatform {
     wireEvents() {
         this.backend.on('deviceState', (id, patch) => {
             for (const handler of this.deviceHandlers.get(id) ?? []) {
-                handler.updateState(patch);
+                try {
+                    handler.updateState(patch);
+                }
+                catch (err) {
+                    this.log.debug(`Failed to apply update to device ${id}: ${err.message}`);
+                }
             }
         });
         this.backend.on('houseMode', (mode) => this.houseModeHandler?.updateHouseMode(mode));
