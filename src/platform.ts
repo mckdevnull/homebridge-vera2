@@ -64,8 +64,14 @@ export class VeraHomebridgePlatform implements DynamicPlatformPlugin {
 
     this.backend = createBackend(this.config, this.log);
 
-    this.api.on('didFinishLaunching', () => void this.start());
-    this.api.on('shutdown', () => void this.backend?.stop());
+    // Never let a startup error become an unhandled rejection — that would crash
+    // the (child) bridge process and take all its accessories offline.
+    this.api.on('didFinishLaunching', () => {
+      this.start().catch((err) => this.log.error(`Vera2 startup failed: ${(err as Error).message}`));
+    });
+    this.api.on('shutdown', () => {
+      this.backend?.stop().catch(() => {});
+    });
   }
 
   /** Called once per cached accessory at startup, before `didFinishLaunching`. */
@@ -182,6 +188,7 @@ export class VeraHomebridgePlatform implements DynamicPlatformPlugin {
       return;
     }
     this.addHandler(device.id, handler);
+    this.log.info(`${isNew ? 'Adding' : 'Restoring'} "${device.name}" (Vera device ${device.id}) as ${device.kind}`);
     if (isNew) {
       this.register(accessory);
     }
@@ -193,6 +200,7 @@ export class VeraHomebridgePlatform implements DynamicPlatformPlugin {
       deviceId: device.id,
     });
     this.addHandler(device.id, createArmSwitchAccessory(this, accessory, device));
+    this.log.info(`${isNew ? 'Adding' : 'Restoring'} arm/disarm switch for "${device.name}" (Vera device ${device.id})`);
     if (isNew) {
       this.register(accessory);
     }
@@ -204,6 +212,7 @@ export class VeraHomebridgePlatform implements DynamicPlatformPlugin {
       sceneId: scene.id,
     });
     new SceneAccessory(this, accessory, scene);
+    this.log.info(`${isNew ? 'Adding' : 'Restoring'} scene "${scene.name}" (id ${scene.id}) as a momentary switch`);
     if (isNew) {
       this.register(accessory);
     }
@@ -212,6 +221,7 @@ export class VeraHomebridgePlatform implements DynamicPlatformPlugin {
   private setupHouseMode(mode: HouseModeValue): void {
     const { accessory, isNew } = this.acquire(this.uuid('housemode'), 'House Mode', { kind: 'housemode' });
     this.houseModeHandler = new HouseModeAccessory(this, accessory, mode);
+    this.log.info(`${isNew ? 'Adding' : 'Restoring'} controller House Mode as a Security System`);
     if (isNew) {
       this.register(accessory);
     }
