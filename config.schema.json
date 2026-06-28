@@ -1,0 +1,116 @@
+{
+  "pluginAlias": "Vera2",
+  "pluginType": "platform",
+  "singular": true,
+  "strictValidation": true,
+  "headerDisplay": "Connects Homebridge to a Vera (MiCasaVerde / Ezlo) controller over the local Luup HTTP API. Local-network access only — no cloud account required.",
+  "footerDisplay": "For help and the device-type support matrix see the [README](https://github.com/mckdevnull/homebridge-vera2#readme).",
+  "schema": {
+    "type": "object",
+    "required": ["name", "host"],
+    "properties": {
+      "name": {
+        "title": "Name",
+        "type": "string",
+        "default": "Vera2",
+        "description": "Platform name shown in the Homebridge logs."
+      },
+      "host": {
+        "title": "Vera Host / IP",
+        "type": "string",
+        "format": "hostname",
+        "placeholder": "192.168.1.50",
+        "description": "The local IP address or hostname of your Vera controller."
+      },
+      "port": {
+        "title": "Port",
+        "type": "integer",
+        "default": 3480,
+        "minimum": 1,
+        "maximum": 65535,
+        "description": "Luup HTTP port. Default is 3480."
+      },
+      "pollTimeoutSeconds": {
+        "title": "Long-poll timeout (seconds)",
+        "type": "integer",
+        "default": 30,
+        "minimum": 5,
+        "maximum": 120,
+        "description": "How long the controller holds each incremental update request open before returning. Higher = less traffic."
+      },
+      "pollMinimumDelayMs": {
+        "title": "Long-poll minimum delay (ms)",
+        "type": "integer",
+        "default": 200,
+        "minimum": 0,
+        "maximum": 5000,
+        "description": "Minimum time the controller waits before returning a change, to coalesce bursts."
+      },
+      "requestTimeoutSeconds": {
+        "title": "Control request timeout (seconds)",
+        "type": "integer",
+        "default": 10,
+        "minimum": 2,
+        "maximum": 60,
+        "description": "Timeout for one-off control/read requests."
+      },
+      "hideScenes": {
+        "title": "Hide Scenes",
+        "type": "boolean",
+        "default": false,
+        "description": "Do not expose Vera scenes as momentary switches."
+      },
+      "hideHouseMode": {
+        "title": "Hide House Mode",
+        "type": "boolean",
+        "default": false,
+        "description": "Do not expose the controller House Mode as a Security System accessory."
+      },
+      "exposeArmDisarm": {
+        "title": "Expose Arm/Disarm switches",
+        "type": "boolean",
+        "default": false,
+        "description": "For armable security sensors, expose an additional switch to arm/disarm the sensor."
+      },
+      "includeDeviceIds": {
+        "title": "Include only these device IDs",
+        "type": "array",
+        "items": { "title": "Device ID", "type": "integer" },
+        "description": "If set, ONLY these Vera device numbers are exposed. Leave empty to expose all."
+      },
+      "excludeDeviceIds": {
+        "title": "Exclude these device IDs",
+        "type": "array",
+        "items": { "title": "Device ID", "type": "integer" },
+        "description": "Vera device numbers to never expose."
+      },
+      "debug": {
+        "title": "Verbose debug logging",
+        "type": "boolean",
+        "default": false
+      }
+    }
+  },
+  "layout": [
+    "name",
+    "host",
+    {
+      "type": "fieldset",
+      "title": "Connection",
+      "expandable": true,
+      "items": ["port", "pollTimeoutSeconds", "pollMinimumDelayMs", "requestTimeoutSeconds"]
+    },
+    {
+      "type": "fieldset",
+      "title": "Exposed accessories",
+      "expandable": true,
+      "items": ["hideScenes", "hideHouseMode", "exposeArmDisarm", "includeDeviceIds", "excludeDeviceIds"]
+    },
+    {
+      "type": "fieldset",
+      "title": "Advanced",
+      "expandable": true,
+      "items": ["debug"]
+    }
+  ]
+}

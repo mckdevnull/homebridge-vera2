@@ -1,0 +1,248 @@
+/**
+ * The Homebridge Dynamic Platform.
+ *
+ * Lifecycle:
+ *  - `configureAccessory` caches each accessory restored from disk (before launch).
+ *  - on `didFinishLaunching` we connect the backend, then `discoverDevices`
+ *    reuses cached accessories, registers new ones and prunes stale ones.
+ *  - backend events route state patches to the matching accessory handler(s).
+ *  - a topology change re-runs discovery; `shutdown` stops the backend.
+ */
+
+import type {
+  API,
+  Characteristic,
+  DynamicPlatformPlugin,
+  Logging,
+  PlatformAccessory,
+  PlatformConfig,
+  Service,
+} from 'homebridge';
+
+import type { VeraDeviceAccessory } from './accessories/deviceAccessory.js';
+import { HouseModeAccessory } from './accessories/houseMode.js';
+import { SceneAccessory } from './accessories/scene.js';
+import { parseConfig, type VeraConfig } from './config.js';
+import { createArmSwitchAccessory, createDeviceAccessory } from './factory.js';
+import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
+import { createBackend } from './vera/backend.js';
+import { isSensorKind, type HouseModeValue } from './vera/categories.js';
+import type { NormalizedDevice, NormalizedScene, VeraBackend } from './vera/types.js';
+
+export class VeraHomebridgePlatform implements DynamicPlatformPlugin {
+  public readonly Service: typeof Service;
+  public readonly Characteristic: typeof Characteristic;
+
+  /** Cached accessories restored from disk, keyed by UUID. */
+  public readonly accessories = new Map<string, PlatformAccessory>();
+
+  /** Active device handlers keyed by Vera device id (a sensor can have >1). */
+  private readonly deviceHandlers = new Map<string, VeraDeviceAccessory[]>();
+  private houseModeHandler?: HouseModeAccessory;
+  private readonly discoveredUuids = new Set<string>();
+
+  public config!: VeraConfig;
+  public backend!: VeraBackend;
+  private configValid = false;
+  private started = false;
+
+  constructor(
+    public readonly log: Logging,
+    rawConfig: PlatformConfig,
+    public readonly api: API,
+  ) {
+    this.Service = api.hap.Service;
+    this.Characteristic = api.hap.Characteristic;
+
+    try {
+      this.config = parseConfig(rawConfig as unknown as Record<string, unknown>);
+      this.configValid = true;
+    } catch (err) {
+      this.log.error(`Vera2 configuration error: ${(err as Error).message}`);
+      return;
+    }
+
+    this.backend = createBackend(this.config, this.log);
+
+    this.api.on('didFinishLaunching', () => void this.start());
+    this.api.on('shutdown', () => void this.backend?.stop());
+  }
+
+  /** Called once per cached accessory at startup, before `didFinishLaunching`. */
+  configureAccessory(accessory: PlatformAccessory): void {
+    this.accessories.set(accessory.UUID, accessory);
+  }
+
+  private async start(): Promise<void> {
+    if (!this.configValid) {
+      return;
+    }
+    this.wireEvents();
+    try {
+      await this.backend.start();
+    } catch (err) {
+      this.log.error(
+        `Failed to connect to Vera at ${this.config.host}:${this.config.port} — ${(err as Error).message}`,
+      );
+      return;
+    }
+    this.started = true;
+    this.discoverDevices();
+  }
+
+  private wireEvents(): void {
+    this.backend.on('deviceState', (id, patch) => {
+      for (const handler of this.deviceHandlers.get(id) ?? []) {
+        handler.updateState(patch);
+      }
+    });
+    this.backend.on('houseMode', (mode) => this.houseModeHandler?.updateHouseMode(mode));
+    this.backend.on('topologyChanged', () => {
+      if (this.started) {
+        this.discoverDevices();
+      }
+    });
+    this.backend.on('connection', (connected) =>
+      this.log.debug(`Vera connection ${connected ? 'established' : 'lost'}`),
+    );
+    this.backend.on('error', (err) => this.log.debug(`Backend error: ${err.message}`));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Discovery / caching lifecycle
+  // ---------------------------------------------------------------------------
+
+  private discoverDevices(): void {
+    this.discoveredUuids.clear();
+    this.deviceHandlers.clear();
+    this.houseModeHandler = undefined;
+
+    for (const device of this.backend.getDevices()) {
+      if (!this.shouldInclude(device.id)) {
+        continue;
+      }
+      this.setupDevice(device);
+      if (this.config.exposeArmDisarm && device.armable && isSensorKind(device.kind)) {
+        this.setupArmSwitch(device);
+      }
+    }
+
+    if (!this.config.hideScenes) {
+      for (const scene of this.backend.getScenes()) {
+        this.setupScene(scene);
+      }
+    }
+
+    if (!this.config.hideHouseMode) {
+      const mode = this.backend.getHouseMode();
+      if (mode !== undefined) {
+        this.setupHouseMode(mode);
+      }
+    }
+
+    this.pruneStale();
+  }
+
+  private setupDevice(device: NormalizedDevice): void {
+    const { accessory, isNew } = this.acquire(this.uuid(`device:${device.id}`), device.name, {
+      kind: 'device',
+      deviceId: device.id,
+    });
+    const handler = createDeviceAccessory(this, accessory, device);
+    if (!handler) {
+      return;
+    }
+    this.addHandler(device.id, handler);
+    if (isNew) {
+      this.register(accessory);
+    }
+  }
+
+  private setupArmSwitch(device: NormalizedDevice): void {
+    const { accessory, isNew } = this.acquire(this.uuid(`arm:${device.id}`), `${device.name} Arm`, {
+      kind: 'arm',
+      deviceId: device.id,
+    });
+    this.addHandler(device.id, createArmSwitchAccessory(this, accessory, device));
+    if (isNew) {
+      this.register(accessory);
+    }
+  }
+
+  private setupScene(scene: NormalizedScene): void {
+    const { accessory, isNew } = this.acquire(this.uuid(`scene:${scene.id}`), scene.name, {
+      kind: 'scene',
+      sceneId: scene.id,
+    });
+    new SceneAccessory(this, accessory, scene);
+    if (isNew) {
+      this.register(accessory);
+    }
+  }
+
+  private setupHouseMode(mode: HouseModeValue): void {
+    const { accessory, isNew } = this.acquire(this.uuid('housemode'), 'House Mode', { kind: 'housemode' });
+    this.houseModeHandler = new HouseModeAccessory(this, accessory, mode);
+    if (isNew) {
+      this.register(accessory);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
+
+  private uuid(suffix: string): string {
+    return this.api.hap.uuid.generate(`${PLUGIN_NAME}:${suffix}`);
+  }
+
+  /** Reuse a cached accessory for `uuid` or create a new one. */
+  private acquire(
+    uuid: string,
+    displayName: string,
+    context: Record<string, unknown>,
+  ): { accessory: PlatformAccessory; isNew: boolean } {
+    this.discoveredUuids.add(uuid);
+    const existing = this.accessories.get(uuid);
+    if (existing) {
+      existing.context = context;
+      this.api.updatePlatformAccessories([existing]);
+      return { accessory: existing, isNew: false };
+    }
+    const accessory = new this.api.platformAccessory(displayName, uuid);
+    accessory.context = context;
+    this.accessories.set(uuid, accessory);
+    return { accessory, isNew: true };
+  }
+
+  private register(accessory: PlatformAccessory): void {
+    this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+  }
+
+  private addHandler(deviceId: string, handler: VeraDeviceAccessory): void {
+    const list = this.deviceHandlers.get(deviceId);
+    if (list) {
+      list.push(handler);
+    } else {
+      this.deviceHandlers.set(deviceId, [handler]);
+    }
+  }
+
+  private pruneStale(): void {
+    for (const [uuid, accessory] of this.accessories) {
+      if (!this.discoveredUuids.has(uuid)) {
+        this.log.info(`Removing accessory no longer present on Vera: ${accessory.displayName}`);
+        this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+        this.accessories.delete(uuid);
+      }
+    }
+  }
+
+  private shouldInclude(id: string): boolean {
+    const { includeDeviceIds, excludeDeviceIds } = this.config;
+    if (includeDeviceIds.length > 0 && !includeDeviceIds.includes(id)) {
+      return false;
+    }
+    return !excludeDeviceIds.includes(id);
+  }
+}

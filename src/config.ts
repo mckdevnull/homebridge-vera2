@@ -1,0 +1,66 @@
+/**
+ * Strongly-typed, validated plugin configuration. We never trust the raw
+ * config.json object — {@link parseConfig} coerces, bounds-checks and applies
+ * defaults, throwing a clear error when a required field is missing.
+ */
+
+export interface VeraConfig {
+  name: string;
+  host: string;
+  port: number;
+  pollTimeoutSeconds: number;
+  pollMinimumDelayMs: number;
+  requestTimeoutSeconds: number;
+  hideScenes: boolean;
+  hideHouseMode: boolean;
+  exposeArmDisarm: boolean;
+  /** Device numbers (as strings) to include exclusively. Empty = include all. */
+  includeDeviceIds: string[];
+  /** Device numbers (as strings) to always exclude. */
+  excludeDeviceIds: string[];
+  debug: boolean;
+}
+
+const num = (value: unknown, fallback: number, min: number, max: number): number => {
+  const n = typeof value === 'number' ? value : Number.parseInt(String(value ?? ''), 10);
+  if (!Number.isFinite(n)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, Math.trunc(n)));
+};
+
+const bool = (value: unknown, fallback = false): boolean =>
+  typeof value === 'boolean' ? value : fallback;
+
+const idList = (value: unknown): string[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((v) => String(v).trim())
+    .filter((v) => v.length > 0);
+};
+
+export function parseConfig(raw: Record<string, unknown>): VeraConfig {
+  const host = typeof raw.host === 'string' ? raw.host.trim() : '';
+  if (!host) {
+    throw new Error(
+      'Missing required "host" — set your Vera controller\'s local IP address or hostname in the plugin config.',
+    );
+  }
+
+  return {
+    name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : 'Vera2',
+    host,
+    port: num(raw.port, 3480, 1, 65535),
+    pollTimeoutSeconds: num(raw.pollTimeoutSeconds, 30, 5, 120),
+    pollMinimumDelayMs: num(raw.pollMinimumDelayMs, 200, 0, 5000),
+    requestTimeoutSeconds: num(raw.requestTimeoutSeconds, 10, 2, 60),
+    hideScenes: bool(raw.hideScenes),
+    hideHouseMode: bool(raw.hideHouseMode),
+    exposeArmDisarm: bool(raw.exposeArmDisarm),
+    includeDeviceIds: idList(raw.includeDeviceIds),
+    excludeDeviceIds: idList(raw.excludeDeviceIds),
+    debug: bool(raw.debug),
+  };
+}
