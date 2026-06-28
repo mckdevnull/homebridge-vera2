@@ -72,17 +72,17 @@ function installFetch() {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: string | URL) => {
-      const id = new URL(String(input)).searchParams.get('id');
+      const url = new URL(String(input));
+      const id = url.searchParams.get('id');
       if (id === 'sdata') {
-        return res(JSON.stringify(SDATA));
+        // discovery sdata has no `timeout`; the live long-poll does.
+        return url.searchParams.has('timeout') ? res('NO_CHANGES') : res(JSON.stringify(SDATA));
       }
       if (id === 'user_data') {
         return res(JSON.stringify(USERDATA));
       }
       if (id === 'status') {
-        return new URL(String(input)).searchParams.has('DataVersion')
-          ? res('NO_CHANGES')
-          : res(JSON.stringify(STATUS));
+        return res(JSON.stringify(STATUS));
       }
       return res('');
     }),

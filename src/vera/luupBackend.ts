@@ -56,6 +56,25 @@ export interface LuupBackendOptions {
   logger: Logger;
 }
 
+interface SdataDevice {
+  id: number | string;
+  /** name/category/subcategory are present in a full payload but NOT in deltas. */
+  name?: string;
+  category?: number | string;
+  subcategory?: number | string;
+  room?: number;
+  // Summary "shortcut" fields that appear (only when changed) in delta payloads:
+  status?: number | string;
+  level?: number | string;
+  locked?: number | string;
+  tripped?: number | string;
+  armed?: number | string;
+  temperature?: number | string;
+  humidity?: number | string;
+  light?: number | string;
+  batterylevel?: number | string;
+}
+
 interface SdataResponse {
   full?: number;
   loadtime?: number;
@@ -65,7 +84,7 @@ interface SdataResponse {
   categories?: Array<{ id: number; name: string }>;
   rooms?: Array<{ id: number; name: string }>;
   scenes?: Array<{ id: number; name: string; room?: number }>;
-  devices?: Array<{ id: number; name: string; category: number; subcategory: number; room?: number }>;
+  devices?: SdataDevice[];
 }
 
 interface StatusResponse {
@@ -182,7 +201,9 @@ export class LuupBackend extends TypedEmitter<BackendEventMap> implements VeraBa
   private async discover(): Promise<void> {
     const sdata = await this.#client.requestJson<SdataResponse>({ id: 'sdata', output_format: 'json' });
     this.#temperatureUnit = sdata.temperature === 'F' ? 'F' : 'C';
+    // The live long-poll runs on `lu_sdata`, so track sdata's own loadtime/dataversion.
     this.#loadTime = toInt(sdata.loadtime, this.#loadTime);
+    this.#dataVersion = toInt(sdata.dataversion, this.#dataVersion);
 
     this.#rooms.clear();
     for (const room of sdata.rooms ?? []) {
@@ -200,9 +221,8 @@ export class LuupBackend extends TypedEmitter<BackendEventMap> implements VeraBa
       });
     }
 
-    // Authoritative service variables.
+    // Authoritative service variables (full snapshot, used to seed #vars).
     const status = await this.#client.requestJson<StatusResponse>({ id: 'status', output_format: 'json' });
-    this.#dataVersion = toInt(status.DataVersion, this.#dataVersion);
     this.ingestStatusDevices(status);
     this.updateHouseMode(status.Mode ?? sdata.mode);
 
@@ -229,15 +249,17 @@ export class LuupBackend extends TypedEmitter<BackendEventMap> implements VeraBa
     this.#devices.clear();
     for (const dev of sdata.devices ?? []) {
       const id = toIdString(dev.id);
+      const category = toInt(dev.category);
+      const subcategory = toInt(dev.subcategory);
       const kind = mapDeviceKind({
-        category: dev.category,
-        subcategory: dev.subcategory,
+        category,
+        subcategory,
         deviceType: meta.get(id)?.deviceType,
         deviceFile: meta.get(id)?.deviceFile,
         hasColor: this.hasService(id, ServiceId.Color),
       });
       if (kind === DeviceKind.Unsupported) {
-        this.#log.debug(`Skipping unsupported device ${id} (${dev.name}) cat=${dev.category}/${dev.subcategory}`);
+        this.#log.debug(`Skipping unsupported device ${id} (${dev.name}) cat=${category}/${subcategory}`);
         continue;
       }
       this.#devices.set(id, {
@@ -249,8 +271,8 @@ export class LuupBackend extends TypedEmitter<BackendEventMap> implements VeraBa
         model: meta.get(id)?.model,
         hasBattery: this.getVar(id, ServiceId.HaDevice, 'BatteryLevel') !== undefined,
         armable: this.getVar(id, ServiceId.SecuritySensor, 'Armed') !== undefined,
-        category: dev.category,
-        subcategory: dev.subcategory,
+        category,
+        subcategory,
         deviceType: meta.get(id)?.deviceType,
         state: this.computeState(id, kind),
       });
@@ -306,17 +328,22 @@ export class LuupBackend extends TypedEmitter<BackendEventMap> implements VeraBa
     }
   }
 
-  /** Performs one long-poll. Returns true if any device state changed. */
+  /**
+   * One incremental long-poll on `lu_sdata`. This is the live update mechanism:
+   * the controller holds the request open and returns the instant a device
+   * changes (subject to MinimumDelay), so HomeKit reflects changes promptly.
+   * Returns true if any exposed device changed.
+   */
   private async pollOnce(): Promise<boolean> {
     const timeoutMs = (this.#opts.pollTimeoutSeconds + 15) * 1000;
     const body = await this.#client.request(
       {
-        id: 'status',
+        id: 'sdata',
         output_format: 'json',
-        DataVersion: this.#dataVersion,
-        LoadTime: this.#loadTime,
-        Timeout: this.#opts.pollTimeoutSeconds,
-        MinimumDelay: this.#opts.pollMinimumDelayMs,
+        loadtime: this.#loadTime,
+        dataversion: this.#dataVersion,
+        timeout: this.#opts.pollTimeoutSeconds,
+        minimumdelay: this.#opts.pollMinimumDelayMs,
       },
       { timeoutMs, signal: this.#stopController.signal },
     );
@@ -326,9 +353,9 @@ export class LuupBackend extends TypedEmitter<BackendEventMap> implements VeraBa
       return false;
     }
 
-    let status: StatusResponse;
+    let sdata: SdataResponse;
     try {
-      status = JSON.parse(trimmed) as StatusResponse;
+      sdata = JSON.parse(trimmed) as SdataResponse;
     } catch {
       this.#log.debug('Ignoring non-JSON poll response');
       return false;
@@ -336,23 +363,23 @@ export class LuupBackend extends TypedEmitter<BackendEventMap> implements VeraBa
 
     this.emit('connection', true);
 
-    const newLoadTime = toInt(status.LoadTime, this.#loadTime);
-    if (newLoadTime !== this.#loadTime && this.#loadTime !== 0) {
+    // A full payload means the controller config changed (device added/removed/
+    // renamed) — re-discover to pick it up.
+    if (sdata.full === 1 && this.#loadTime !== 0) {
       this.#log.info('Vera topology changed; re-discovering devices.');
       await this.discover();
       this.emit('topologyChanged');
       return true;
     }
-    this.#loadTime = newLoadTime;
-    this.#dataVersion = toInt(status.DataVersion, this.#dataVersion);
-    this.updateHouseMode(status.Mode);
 
-    const devices = status.devices ?? status.Devices ?? [];
+    this.#loadTime = toInt(sdata.loadtime, this.#loadTime);
+    this.#dataVersion = toInt(sdata.dataversion, this.#dataVersion);
+    this.updateHouseMode(sdata.mode);
+
     let changed = false;
     let needsRediscover = false;
-    for (const sd of devices) {
-      const id = toIdString(sd.id);
-      this.applyStatusStates(id, sd);
+    for (const dev of sdata.devices ?? []) {
+      const id = toIdString(dev.id);
       const device = this.#devices.get(id);
       if (!device) {
         // A device we don't expose (unsupported type, or the controller itself)
@@ -363,9 +390,20 @@ export class LuupBackend extends TypedEmitter<BackendEventMap> implements VeraBa
         }
         continue;
       }
-      const next = this.computeState(id, device.kind);
-      device.state = next;
-      this.emit('deviceState', id, next);
+
+      this.applySdataShortcuts(id, dev);
+      // The sdata summary doesn't carry colour or thermostat mode/setpoint, so
+      // pull the authoritative service variables for those kinds when they change.
+      if (device.kind === DeviceKind.Thermostat || device.kind === DeviceKind.RgbLight) {
+        try {
+          await this.refreshDeviceVars(id);
+        } catch (err) {
+          this.#log.debug(`Refreshing device ${id} failed: ${(err as Error).message}`);
+        }
+      }
+
+      device.state = this.computeState(id, device.kind);
+      this.emit('deviceState', id, device.state);
       changed = true;
     }
 
@@ -378,23 +416,45 @@ export class LuupBackend extends TypedEmitter<BackendEventMap> implements VeraBa
     return changed;
   }
 
-  async refreshDevice(id: string): Promise<void> {
+  /** Map an sdata summary device's shortcut fields onto the service-variable map. */
+  private applySdataShortcuts(id: string, dev: SdataDevice): void {
+    const set = (svc: string, variable: string, value: number | string | undefined): void => {
+      if (value !== undefined) {
+        this.setVar(id, svc, variable, String(value));
+      }
+    };
+    set(ServiceId.SwitchPower, 'Status', dev.status);
+    set(ServiceId.Dimming, 'LoadLevelStatus', dev.level);
+    set(ServiceId.DoorLock, 'Status', dev.locked);
+    set(ServiceId.SecuritySensor, 'Tripped', dev.tripped);
+    set(ServiceId.SecuritySensor, 'Armed', dev.armed);
+    set(ServiceId.TemperatureSensor, 'CurrentTemperature', dev.temperature);
+    set(ServiceId.HumiditySensor, 'CurrentLevel', dev.humidity);
+    set(ServiceId.LightSensor, 'CurrentLevel', dev.light);
+    set(ServiceId.HaDevice, 'BatteryLevel', dev.batterylevel);
+  }
+
+  /** Refresh one device's full service variables from `status` (no event emitted). */
+  private async refreshDeviceVars(id: string): Promise<void> {
     const status = await this.#client.requestJson<StatusResponse>({
       id: 'status',
       output_format: 'json',
       DeviceNum: id,
     });
-    const devices = status.devices ?? status.Devices ?? [];
-    for (const sd of devices) {
-      if (toIdString(sd.id) !== id) {
-        continue;
+    for (const sd of status.devices ?? status.Devices ?? []) {
+      if (toIdString(sd.id) === id) {
+        this.applyStatusStates(id, sd);
       }
-      this.applyStatusStates(id, sd);
-      const device = this.#devices.get(id);
-      if (device) {
-        device.state = this.computeState(id, device.kind);
-        this.emit('deviceState', id, device.state);
-      }
+    }
+  }
+
+  /** Force an immediate full refresh of one device and emit its new state. */
+  async refreshDevice(id: string): Promise<void> {
+    await this.refreshDeviceVars(id);
+    const device = this.#devices.get(id);
+    if (device) {
+      device.state = this.computeState(id, device.kind);
+      this.emit('deviceState', id, device.state);
     }
   }
 

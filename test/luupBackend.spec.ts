@@ -78,6 +78,10 @@ function installFetch() {
     const url = new URL(String(input));
     const id = url.searchParams.get('id');
     if (id === 'sdata') {
+      // The live long-poll carries `timeout`; discovery's sdata does not.
+      if (url.searchParams.has('timeout')) {
+        return res('NO_CHANGES');
+      }
       return res(JSON.stringify(SDATA));
     }
     if (id === 'user_data') {
@@ -90,9 +94,6 @@ function installFetch() {
     if (id === 'status') {
       if (url.searchParams.has('DeviceNum')) {
         return res(refreshBody);
-      }
-      if (url.searchParams.has('DataVersion')) {
-        return res('NO_CHANGES');
       }
       return res(JSON.stringify(STATUS));
     }
@@ -208,9 +209,52 @@ describe('LuupBackend.probe', () => {
     expect(backend.getDevices().length).toBe(5);
     expect(backend.getScenes()).toHaveLength(1);
 
-    // probe() must not start the long-poll: no status request carries a DataVersion.
-    const polled = fetchMock.mock.calls.some((c) => String(c[0]).includes('DataVersion'));
+    // probe() must not start the long-poll: no request carries the poll `timeout`.
+    const polled = fetchMock.mock.calls.some((c) => String(c[0]).includes('timeout='));
     expect(polled).toBe(false);
+    await backend.stop();
+  });
+});
+
+describe('LuupBackend live updates (lu_sdata long-poll)', () => {
+  it('emits a state change from an sdata delta and uses lowercase sdata poll params', async () => {
+    let polled = false;
+    let pollUrl: URL | undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL) => {
+        const url = new URL(String(input));
+        const id = url.searchParams.get('id');
+        if (id === 'sdata') {
+          if (url.searchParams.has('timeout')) {
+            pollUrl = url;
+            if (!polled) {
+              polled = true;
+              // device 6 (a switch, on=false at discovery) turns on
+              return res(JSON.stringify({ full: 0, loadtime: 111, dataversion: 223, devices: [{ id: 6, status: '1' }] }));
+            }
+            return res('NO_CHANGES');
+          }
+          return res(JSON.stringify(SDATA));
+        }
+        if (id === 'user_data') {
+          return res(JSON.stringify(USERDATA));
+        }
+        return res(id === 'status' ? JSON.stringify(STATUS) : '');
+      }),
+    );
+
+    const backend = makeBackend();
+    const events: Array<[string, Partial<DeviceState>]> = [];
+    backend.on('deviceState', (deviceId, state) => events.push([deviceId, state]));
+    await backend.start();
+    await new Promise((r) => setTimeout(r, 60));
+
+    expect(events.some(([deviceId, state]) => deviceId === '6' && state.on === true)).toBe(true);
+    // The poll used lu_sdata with lowercase params (not the status/DataVersion form).
+    expect(pollUrl?.searchParams.get('id')).toBe('sdata');
+    expect(pollUrl?.searchParams.has('dataversion')).toBe(true);
+    expect(pollUrl?.searchParams.has('minimumdelay')).toBe(true);
     await backend.stop();
   });
 });
@@ -237,7 +281,7 @@ describe('LuupBackend.refreshDevice', () => {
 
 describe('LuupBackend re-discovery behaviour', () => {
   it('ignores updates for known unsupported devices (no re-discovery loop)', async () => {
-    const sdata = {
+    const sdataFull = {
       full: 1,
       loadtime: 1,
       dataversion: 2,
@@ -258,14 +302,7 @@ describe('LuupBackend re-discovery behaviour', () => {
         { id: 99, states: [{ service: 'urn:micasaverde-com:serviceId:EnergyMetering1', variable: 'Watts', value: '100' }] },
       ],
     };
-    const pollDelta = {
-      LoadTime: 1,
-      DataVersion: 3,
-      devices: [
-        { id: 99, states: [{ service: 'urn:micasaverde-com:serviceId:EnergyMetering1', variable: 'Watts', value: '200' }] },
-      ],
-    };
-    let sdataCalls = 0;
+    let discoverCalls = 0;
     let polled = false;
     vi.stubGlobal(
       'fetch',
@@ -273,20 +310,21 @@ describe('LuupBackend re-discovery behaviour', () => {
         const url = new URL(String(input));
         const id = url.searchParams.get('id');
         if (id === 'sdata') {
-          sdataCalls++;
-          return res(JSON.stringify(sdata));
+          if (url.searchParams.has('timeout')) {
+            // long-poll: the unsupported meter (id 99) reports a change once
+            if (!polled) {
+              polled = true;
+              return res(JSON.stringify({ full: 0, loadtime: 1, dataversion: 3, devices: [{ id: 99, status: '1' }] }));
+            }
+            return res('NO_CHANGES');
+          }
+          discoverCalls++;
+          return res(JSON.stringify(sdataFull));
         }
         if (id === 'user_data') {
           return res(JSON.stringify({ devices: [] }));
         }
         if (id === 'status') {
-          if (url.searchParams.has('DataVersion')) {
-            if (!polled) {
-              polled = true;
-              return res(JSON.stringify(pollDelta));
-            }
-            return res('NO_CHANGES');
-          }
           return res(JSON.stringify(statusFull));
         }
         return res('');
@@ -300,13 +338,13 @@ describe('LuupBackend re-discovery behaviour', () => {
     await new Promise((r) => setTimeout(r, 60));
 
     expect(backend.getDevices()).toHaveLength(1); // only the supported switch
-    expect(sdataCalls).toBe(1); // discovery ran once; the unsupported meter did NOT cause a re-discovery
+    expect(discoverCalls).toBe(1); // discovery ran once; the unsupported meter did NOT cause a re-discovery
     expect(topo).toHaveLength(0);
     await backend.stop();
   });
 
   it('re-discovers once when a genuinely new device appears', async () => {
-    let sdataCalls = 0;
+    let discoverCalls = 0;
     let polled = false;
     vi.stubGlobal(
       'fetch',
@@ -314,9 +352,17 @@ describe('LuupBackend re-discovery behaviour', () => {
         const url = new URL(String(input));
         const id = url.searchParams.get('id');
         if (id === 'sdata') {
-          sdataCalls++;
+          if (url.searchParams.has('timeout')) {
+            // long-poll: a never-seen device (id 7) appears once
+            if (!polled) {
+              polled = true;
+              return res(JSON.stringify({ full: 0, loadtime: 1, dataversion: 3, devices: [{ id: 7, status: '1' }] }));
+            }
+            return res('NO_CHANGES');
+          }
+          discoverCalls++;
           const devices =
-            sdataCalls === 1
+            discoverCalls === 1
               ? [{ id: 5, name: 'Lamp', category: 3, subcategory: 1 }]
               : [
                   { id: 5, name: 'Lamp', category: 3, subcategory: 1 },
@@ -328,20 +374,7 @@ describe('LuupBackend re-discovery behaviour', () => {
           return res(JSON.stringify({ devices: [] }));
         }
         if (id === 'status') {
-          if (url.searchParams.has('DataVersion')) {
-            if (!polled) {
-              polled = true;
-              return res(
-                JSON.stringify({
-                  LoadTime: 1,
-                  DataVersion: 3,
-                  devices: [{ id: 7, states: [{ service: 'urn:upnp-org:serviceId:SwitchPower1', variable: 'Status', value: '1' }] }],
-                }),
-              );
-            }
-            return res('NO_CHANGES');
-          }
-          const ids = sdataCalls <= 1 ? [5] : [5, 7];
+          const ids = discoverCalls <= 1 ? [5] : [5, 7];
           return res(
             JSON.stringify({
               LoadTime: 1,
@@ -360,7 +393,7 @@ describe('LuupBackend re-discovery behaviour', () => {
     await backend.start();
     await new Promise((r) => setTimeout(r, 80));
 
-    expect(sdataCalls).toBeGreaterThanOrEqual(2); // re-discovered after the new device appeared
+    expect(discoverCalls).toBeGreaterThanOrEqual(2); // re-discovered after the new device appeared
     expect(topo.length).toBeGreaterThanOrEqual(1);
     expect(backend.getDevices().map((d) => d.id).sort()).toEqual(['5', '7']);
     await backend.stop();
@@ -375,6 +408,9 @@ describe('LuupBackend thermostat inference & name fallback', () => {
         const url = new URL(String(input));
         const id = url.searchParams.get('id');
         if (id === 'sdata') {
+          if (url.searchParams.has('timeout')) {
+            return res('NO_CHANGES');
+          }
           return res(JSON.stringify(sdata));
         }
         if (id === 'user_data') {

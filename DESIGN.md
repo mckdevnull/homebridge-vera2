@@ -72,15 +72,21 @@ optional. Always use `output_format=json` (XML conversion is CPU-heavy on the co
   `{service, variable, value}`).
 - `id=user_data&ns=1` → device_type / device_file / manufacturer / model (best effort).
 
-`LuupBackend` merges these by device id. `status` is the source of truth for state; `sdata`
-provides topology and names.
+`LuupBackend` merges these by device id. `status` seeds the authoritative service-variable map
+at discovery; `sdata` provides topology/names and drives the live update loop (below).
 
 ### Incremental long-poll
-`id=status` with `DataVersion`, `LoadTime`, `Timeout`, `MinimumDelay`. The controller blocks
-until a change (or timeout) and returns only changed devices' states, or the text
-`NO_CHANGES`. An increase in `LoadTime` means the topology changed → re-discover. On error the
-cursor resets and the loop backs off (≈9 s); a no-change response backs off ≈1 s to avoid a
-hot loop if the controller does not honour blocking.
+Live updates use **`id=sdata`** with `loadtime`, `dataversion`, `timeout`, `minimumdelay`
+(lowercase). The controller holds the request open and returns the instant a device changes
+(subject to `minimumdelay`), giving low-latency updates — this is the same endpoint Home
+Assistant's pyvera uses, and it returns changes more reliably/promptly than `status` on real
+firmware. A `full=1` payload means the topology changed → re-discover. The sdata summary's
+shortcut fields (`status`, `level`, `locked`, `tripped`, `armed`, `temperature`, `humidity`,
+`light`, `batterylevel`) are mapped onto the service-variable map; colour and thermostat
+mode/setpoint aren't in the summary, so for `RgbLight`/`Thermostat` devices a targeted
+`id=status&DeviceNum=<id>` is fetched when they change. On error the cursor resets and the loop
+backs off (≈9 s); a no-change response backs off ≈1 s to avoid a hot loop. (`id=status` is still
+used for the authoritative full snapshot at discovery and for the targeted per-device refresh.)
 
 ### Control actions
 `id=action&output_format=json&DeviceNum=<n>&serviceId=<sid>&action=<name>&<arg>=<value>`.

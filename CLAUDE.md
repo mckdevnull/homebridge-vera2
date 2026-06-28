@@ -38,8 +38,9 @@ index.ts → platform.ts (DynamicPlatformPlugin) → factory.ts → accessories/
   selected in `src/vera/backend.ts` — **no accessory code should change to add it.**
 - **Data flow:** `LuupBackend` discovers via `sdata` (topology/names/scenes/house-mode/unit) +
   `status` (authoritative service variables) + `user_data` (metadata), then keeps state current
-  with an **incremental `status` long-poll** (`DataVersion`/`LoadTime`/`Timeout`/`MinimumDelay`).
-  It emits `deviceState` patches; the platform routes them to accessory `updateState`.
+  with an **incremental `lu_sdata` long-poll** (lowercase `loadtime`/`dataversion`/`timeout`/
+  `minimumdelay`) — chosen over `status` because real Vera firmware returns changes from sdata
+  promptly. It emits `deviceState` patches; the platform routes them to accessory `updateState`.
 - **Mapping:** `mapDeviceKind` (`src/vera/categories.ts`) turns Vera category/subcategory
   (+ device_type/file hints) into a `DeviceKind`; `factory.ts` maps `DeviceKind` to an accessory
   class. Read `DESIGN.md` for the full category/serviceId/action reference.
@@ -56,8 +57,11 @@ index.ts → platform.ts (DynamicPlatformPlugin) → factory.ts → accessories/
 - **Vera argument-name casing is inconsistent and must be passed verbatim**
   (`newTargetValue`, `newLoadlevelTarget` — lowercase "l", `newArmedValue`, vs `NewModeTarget`,
   `NewCurrentSetpoint`). Do not "normalise" these.
-- **`status` is the source of truth for state; `sdata` is for topology/names.** A change in the
-  long-poll's `LoadTime` means devices/scenes changed → full re-discovery + `topologyChanged`.
+- **`status` seeds the variable map at discovery; the live `lu_sdata` long-poll updates it.**
+  sdata carries shortcut fields (status/level/locked/tripped/armed/temperature/humidity/light/
+  batterylevel) mapped onto `#vars`; colour + thermostat mode/setpoint aren't in sdata, so
+  `RgbLight`/`Thermostat` get a targeted `status&DeviceNum` refresh on change. A `full=1` sdata
+  payload means the topology changed → full re-discovery + `topologyChanged`.
 - **Units:** HomeKit needs Celsius (convert using the controller unit from `sdata.temperature`);
   brightness is 0–100 in both Vera and HomeKit (no 0–255 scaling). Raw Luup values are loosely
   typed strings (`"1"`, `"0.0"`, `"55%"`) — always parse via `src/vera/transform.ts`.

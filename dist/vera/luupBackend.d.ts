@@ -42,8 +42,18 @@ export declare class LuupBackend extends TypedEmitter<BackendEventMap> implement
     private discover;
     private fetchUserDataMeta;
     private pollLoop;
-    /** Performs one long-poll. Returns true if any device state changed. */
+    /**
+     * One incremental long-poll on `lu_sdata`. This is the live update mechanism:
+     * the controller holds the request open and returns the instant a device
+     * changes (subject to MinimumDelay), so HomeKit reflects changes promptly.
+     * Returns true if any exposed device changed.
+     */
     private pollOnce;
+    /** Map an sdata summary device's shortcut fields onto the service-variable map. */
+    private applySdataShortcuts;
+    /** Refresh one device's full service variables from `status` (no event emitted). */
+    private refreshDeviceVars;
+    /** Force an immediate full refresh of one device and emit its new state. */
     refreshDevice(id: string): Promise<void>;
     setSwitch(id: string, on: boolean): Promise<void>;
     setBrightness(id: string, percent: number): Promise<void>;
