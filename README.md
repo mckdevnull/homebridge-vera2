@@ -117,7 +117,7 @@ sudo hb-service restart
 
 > Depending on how your system is set up, you may not need `sudo`. If you get a permissions error, add `sudo`; if `sudo` is unnecessary on your machine, drop it.
 
-> The plugin **compiles itself automatically during installation** (via an npm `prepare` step), so there is no separate build command for this path. If you installed an early version that did *not* build automatically and the plugin never showed up, just re-run the command above to reinstall.
+> The plugin **ships prebuilt** — installing it does **not** compile anything, so no build tools (TypeScript, etc.) are needed on your machine. (If an earlier version failed to install on Windows with an error like `'rimraf' is not recognized` or `git dep preparation failed`, that install-time build step has been removed — just re-run the command above.)
 
 After Homebridge restarts, the plugin appears under the Config UI X **Plugins** tab (the *installed* plugins list — **not** plugin search). Open its **Settings** there to configure it, or edit `config.json` directly (see [Configuration](#configuration)).
 
@@ -321,32 +321,19 @@ Setting the Security System state in HomeKit changes the controller's House Mode
 Two different things are going on:
 
 - **Search will never find it (yet).** Config UI X plugin *search* only lists plugins published to the **npm registry**. This plugin isn't published there yet, so it won't appear in search. That's expected — install it from GitHub instead (see [Installation](#installation)).
-- **An installed GitHub plugin should appear under the Plugins tab.** A GitHub install only shows up once its TypeScript has been **compiled to `dist/`**. Current versions build automatically on install (an npm `prepare` step), but if you installed an early version that didn't, the package has no compiled entry point and Homebridge can't load it — so it won't appear at all.
+- **After a GitHub install it appears under the Plugins tab.** The plugin ships **prebuilt** (the compiled `dist/` is bundled), so installing needs no build tools and runs no build step. Once installed and Homebridge is restarted, it shows up under the **Plugins** tab (the *installed* list).
 
-**Fix — reinstall (this rebuilds it):**
-
-```bash
-sudo npm install -g git+https://github.com/mckdevnull/homebridge-vera2.git
-sudo hb-service restart
-```
-
-**Verify it actually built.** Confirm the compiled entry point exists in the global install:
+**Saw `'rimraf' is not recognized` or `git dep preparation failed` on Windows?** That came from an older version that tried to compile during installation. That step has been removed — the plugin now ships prebuilt. Just reinstall and restart:
 
 ```bash
-ls "$(npm root -g)/homebridge-vera2/dist/index.js"
+npm install -g git+https://github.com/mckdevnull/homebridge-vera2.git
 ```
 
-If that file is missing, build it in place and restart:
+(then restart Homebridge — `hb-service restart`, the **Restart Homebridge** button, or restart the Docker container. On macOS/Linux you may need `sudo` before `npm`.)
 
-```bash
-cd "$(npm root -g)/homebridge-vera2"
-sudo npm install   # the "prepare" step compiles dist/
-sudo hb-service restart
-```
+**Sanity check** — confirm it installed: `npm ls -g homebridge-vera2`. If the plugin still doesn't load after a restart, check the Homebridge logs for the reason and reinstall with the command above.
 
-(Docker / Synology: run the same commands **inside the container** via `docker exec -it homebridge sh`, then restart the container.)
-
-**Then configure it.** Once it loads, it appears under the Config UI X **Plugins** tab — click **Settings** to use the form. If you prefer, you can skip the UI entirely and add the platform block to `config.json` yourself (see [Configuration](#configuration)); manual config works regardless of whether the plugin shows in the UI, as long as `dist/` is built.
+**Then configure it.** Once Homebridge restarts, the plugin appears under the Config UI X **Plugins** tab — click **Settings** to use the form. You can also skip the UI entirely and add the platform block to `config.json` yourself (see [Configuration](#configuration)); manual config works regardless of whether the plugin shows in the UI.
 
 ### No devices found / cannot connect to the Vera
 

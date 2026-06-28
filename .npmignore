@@ -1,5 +1,6 @@
 src/
 test/
+scripts/
 coverage/
 .github/
 *.spec.ts
