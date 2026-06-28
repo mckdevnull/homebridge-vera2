@@ -152,4 +152,3 @@ export function mapDeviceKind(hints) {
             return DeviceKind.Unsupported;
     }
 }
-//# sourceMappingURL=categories.js.map

@@ -15,4 +15,3 @@ export function createBackend(config, logger) {
         logger,
     });
 }
-//# sourceMappingURL=backend.js.map

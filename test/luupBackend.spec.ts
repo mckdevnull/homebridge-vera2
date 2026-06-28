@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { noopLogger } from '../src/util/logger.js';
 import { DeviceKind } from '../src/vera/categories.js';
 import { LuupBackend } from '../src/vera/luupBackend.js';
-import type { DeviceState } from '../src/vera/types.js';
+import { ThermostatMode, type DeviceState } from '../src/vera/types.js';
 
 const SDATA = {
   full: 1,
@@ -347,6 +347,66 @@ describe('LuupBackend re-discovery behaviour', () => {
     expect(sdataCalls).toBeGreaterThanOrEqual(2); // re-discovered after the new device appeared
     expect(topo.length).toBeGreaterThanOrEqual(1);
     expect(backend.getDevices().map((d) => d.id).sort()).toEqual(['5', '7']);
+    await backend.stop();
+  });
+});
+
+describe('LuupBackend thermostat inference & name fallback', () => {
+  function stub(sdata: object, statusFull: object) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL) => {
+        const url = new URL(String(input));
+        const id = url.searchParams.get('id');
+        if (id === 'sdata') {
+          return res(JSON.stringify(sdata));
+        }
+        if (id === 'user_data') {
+          return res(JSON.stringify({ devices: [] }));
+        }
+        if (id === 'status') {
+          return url.searchParams.has('DataVersion') ? res('NO_CHANGES') : res(JSON.stringify(statusFull));
+        }
+        return res('');
+      }),
+    );
+  }
+
+  it('infers heating when HVAC_OperatingState ModeState is absent', async () => {
+    stub(
+      { full: 1, loadtime: 1, dataversion: 2, temperature: 'C', rooms: [], scenes: [], devices: [{ id: 30, name: 'Thermo', category: 5, subcategory: 1 }] },
+      {
+        LoadTime: 1,
+        DataVersion: 2,
+        devices: [
+          {
+            id: 30,
+            states: [
+              { service: 'urn:upnp-org:serviceId:TemperatureSensor1', variable: 'CurrentTemperature', value: '18' },
+              { service: 'urn:upnp-org:serviceId:HVAC_UserOperatingMode1', variable: 'ModeStatus', value: 'HeatOn' },
+              { service: 'urn:upnp-org:serviceId:TemperatureSetpoint1', variable: 'CurrentSetpoint', value: '22' },
+              // deliberately NO HVAC_OperatingState1.ModeState
+            ],
+          },
+        ],
+      },
+    );
+    const backend = makeBackend();
+    await backend.start();
+    const t = backend.getDevices().find((d) => d.id === '30')!;
+    expect(t.state.mode).toBe(ThermostatMode.Heat);
+    expect(t.state.operatingState).toBe('heating'); // inferred from 18 < 22 while in Heat mode
+    await backend.stop();
+  });
+
+  it('falls back to a generated name when the device name is empty', async () => {
+    stub(
+      { full: 1, loadtime: 1, dataversion: 2, temperature: 'C', rooms: [], scenes: [], devices: [{ id: 41, name: '', category: 3, subcategory: 1 }] },
+      { LoadTime: 1, DataVersion: 2, devices: [{ id: 41, states: [{ service: 'urn:upnp-org:serviceId:SwitchPower1', variable: 'Status', value: '1' }] }] },
+    );
+    const backend = makeBackend();
+    await backend.start();
+    expect(backend.getDevices()[0].name).toBe('Device 41');
     await backend.stop();
   });
 });

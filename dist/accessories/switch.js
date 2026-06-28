@@ -22,4 +22,3 @@ export class SwitchAccessory extends VeraDeviceAccessory {
         this.state.on = value;
     }
 }
-//# sourceMappingURL=switch.js.map

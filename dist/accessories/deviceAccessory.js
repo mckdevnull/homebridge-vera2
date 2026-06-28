@@ -50,6 +50,9 @@ export class VeraDeviceAccessory extends AccessoryBase {
             this.notResponding();
         }
     }
+    /** Cancel any pending work (timers) before this handler is dropped during a
+     * re-discovery. Overridden by accessories that schedule timers. */
+    dispose() { }
     updateBattery() {
         if (!this.batteryService) {
             return;
@@ -62,4 +65,3 @@ export class VeraDeviceAccessory extends AccessoryBase {
             : this.Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL);
     }
 }
-//# sourceMappingURL=deviceAccessory.js.map

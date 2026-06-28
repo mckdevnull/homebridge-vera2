@@ -4,5 +4,7 @@ export declare class FanAccessory extends VeraDeviceAccessory {
     private service;
     private hasSpeed;
     protected setupServices(): void;
+    /** Idempotently add the RotationSpeed characteristic + handlers. */
+    private wireSpeed;
     protected pushState(): void;
 }

@@ -6,6 +6,7 @@ import { AccessoryBase } from './base.js';
 export declare class SceneAccessory extends AccessoryBase {
     private readonly scene;
     private service;
+    private offTimer?;
     constructor(platform: VeraHomebridgePlatform, accessory: PlatformAccessory, scene: NormalizedScene);
     private setup;
 }

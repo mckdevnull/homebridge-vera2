@@ -80,4 +80,3 @@ export function rgbToHsv({ r, g, b }) {
         value: Math.round(max * 100),
     };
 }
-//# sourceMappingURL=color.js.map

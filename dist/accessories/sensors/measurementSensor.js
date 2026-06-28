@@ -35,4 +35,3 @@ export class MeasurementSensorAccessory extends VeraDeviceAccessory {
         this.service.updateCharacteristic(this.Characteristic.StatusActive, this.state.online);
     }
 }
-//# sourceMappingURL=measurementSensor.js.map

@@ -25,7 +25,7 @@ export class ThermostatAccessory extends VeraDeviceAccessory {
         });
         this.service
             .getCharacteristic(this.Characteristic.TargetTemperature)
-            .setProps({ minValue: 7, maxValue: 35, minStep: 0.5 })
+            .setProps({ minValue: 4, maxValue: 38, minStep: 0.5 })
             .onGet(() => this.state.targetTemperature ?? 20)
             .onSet(async (value) => {
             await this.platform.backend.setThermostatSetpoint(this.id, value);
@@ -89,4 +89,3 @@ export class ThermostatAccessory extends VeraDeviceAccessory {
         }
     }
 }
-//# sourceMappingURL=thermostat.js.map

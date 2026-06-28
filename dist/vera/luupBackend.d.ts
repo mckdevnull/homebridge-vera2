@@ -62,6 +62,13 @@ export declare class LuupBackend extends TypedEmitter<BackendEventMap> implement
     /** Build the normalised state for a device from its current variable map. */
     private computeState;
     private computeThermostatState;
+    /**
+     * Determine whether the thermostat is actively heating/cooling. Prefer the
+     * explicit `HVAC_OperatingState1.ModeState`; when the device doesn't report it,
+     * infer from the selected mode and setpoint vs current temperature so a heating
+     * thermostat isn't shown as OFF.
+     */
+    private inferOperatingState;
     /** Pick the relevant setpoint: the plain one if present, else heat/cool by mode. */
     private resolveSetpoint;
     private sleep;

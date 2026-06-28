@@ -41,6 +41,31 @@ describe('LuupClient.requestJson', () => {
     vi.stubGlobal('fetch', vi.fn(async () => res('', false, 500)));
     await expect(client.request({ id: 'sdata' })).rejects.toThrow(/HTTP 500/);
   });
+
+  it('rejects an over-large response via Content-Length', async () => {
+    const huge = String(64 * 1024 * 1024); // 64 MB > 32 MB cap
+    const oversized = {
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: { get: (h: string) => (h === 'content-length' ? huge : null) },
+      text: async () => '{}',
+    } as unknown as Response;
+    vi.stubGlobal('fetch', vi.fn(async () => oversized));
+    await expect(client.request({ id: 'status' })).rejects.toThrow(/too large/);
+  });
+});
+
+describe('LuupClient.buildUrl host safety', () => {
+  it('treats host as an opaque hostname (cannot rewrite path/authority)', () => {
+    // Even if a bad host slipped past config validation, searchParams + hostname
+    // assignment keep it contained to the host position.
+    const c = new LuupClient({ host: '10.0.0.9', port: 3480, requestTimeoutSeconds: 5, logger: noopLogger });
+    const url = new URL(c.buildUrl({ id: 'status' }));
+    expect(url.hostname).toBe('10.0.0.9');
+    expect(url.port).toBe('3480');
+    expect(url.pathname).toBe('/data_request');
+  });
 });
 
 describe('LuupClient.action', () => {

@@ -7,4 +7,3 @@ export const PLATFORM_NAME = 'Vera2';
  * The npm package name. MUST match the `name` field in package.json.
  */
 export const PLUGIN_NAME = 'homebridge-vera2';
-//# sourceMappingURL=settings.js.map

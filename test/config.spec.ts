@@ -36,4 +36,24 @@ describe('parseConfig', () => {
     expect(c.includeDeviceIds).toEqual(['5', '6', '7']);
     expect(c.excludeDeviceIds).toEqual(['8']);
   });
+
+  it('accepts bare IPs and hostnames', () => {
+    expect(parseConfig({ host: '192.168.1.50' }).host).toBe('192.168.1.50');
+    expect(parseConfig({ host: 'vera.local' }).host).toBe('vera.local');
+    expect(parseConfig({ host: '[fe80::1]' }).host).toBe('[fe80::1]');
+  });
+
+  it('rejects malformed hosts (scheme, path, port, credentials, spaces)', () => {
+    for (const host of [
+      'http://192.168.1.50',
+      '192.168.1.50/',
+      '192.168.1.50:3480',
+      'evil.com/@10.0.0.1',
+      'attacker.com#@192.168.1.50',
+      'user:pass@10.0.0.1',
+      'has space',
+    ]) {
+      expect(() => parseConfig({ host }), host).toThrow(/Invalid "host"/);
+    }
+  });
 });

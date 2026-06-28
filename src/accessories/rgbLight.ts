@@ -77,6 +77,13 @@ export class RgbLightAccessory extends VeraDeviceAccessory {
     }
   }
 
+  override dispose(): void {
+    if (this.colorTimer) {
+      clearTimeout(this.colorTimer);
+      this.colorTimer = undefined;
+    }
+  }
+
   /** Coalesce the Hue+Saturation writes that the Home app sends back-to-back. */
   private scheduleColor(): void {
     if (this.colorTimer) {

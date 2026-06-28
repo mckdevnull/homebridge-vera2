@@ -36,4 +36,3 @@ export class LockAccessory extends VeraDeviceAccessory {
         return this.state.locked ? t.SECURED : t.UNSECURED;
     }
 }
-//# sourceMappingURL=lock.js.map

@@ -33,4 +33,3 @@ export class DimmerAccessory extends VeraDeviceAccessory {
         }
     }
 }
-//# sourceMappingURL=dimmer.js.map

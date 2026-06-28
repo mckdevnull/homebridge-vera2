@@ -23,6 +23,10 @@ import { rgbToHsv } from '../color.js';
 const NO_CHANGE_BACKOFF_MS = 1000;
 /** Backoff after a failed poll. */
 const ERROR_BACKOFF_MS = 9000;
+/** Coerce a possibly-missing Vera name into a safe, non-empty display name. */
+function safeName(name, fallback) {
+    return typeof name === 'string' && name.trim() ? name.trim() : fallback;
+}
 export class LuupBackend extends TypedEmitter {
     #client;
     #log;
@@ -92,7 +96,7 @@ export class LuupBackend extends TypedEmitter {
             const id = toIdString(scene.id);
             this.#scenes.set(id, {
                 id,
-                name: scene.name,
+                name: safeName(scene.name, `Scene ${id}`),
                 room: scene.room !== undefined ? this.#rooms.get(scene.room) : undefined,
             });
         }
@@ -112,6 +116,12 @@ export class LuupBackend extends TypedEmitter {
         for (const sd of status.devices ?? status.Devices ?? []) {
             this.#knownDeviceIds.add(toIdString(sd.id));
         }
+        // Drop cached service variables for devices no longer on the controller.
+        for (const id of this.#vars.keys()) {
+            if (!this.#knownDeviceIds.has(id)) {
+                this.#vars.delete(id);
+            }
+        }
         this.#devices.clear();
         for (const dev of sdata.devices ?? []) {
             const id = toIdString(dev.id);
@@ -128,7 +138,7 @@ export class LuupBackend extends TypedEmitter {
             }
             this.#devices.set(id, {
                 id,
-                name: dev.name,
+                name: safeName(dev.name, `Device ${id}`),
                 kind,
                 room: dev.room !== undefined ? this.#rooms.get(dev.room) : undefined,
                 manufacturer: meta.get(id)?.manufacturer,
@@ -461,20 +471,39 @@ export class LuupBackend extends TypedEmitter {
             state.currentTemperature = toCelsius(temp, this.#temperatureUnit);
         }
         state.mode = this.fromVeraHvacMode(this.getVar(id, ServiceId.HvacUserMode, 'ModeStatus'));
-        const opState = this.getVar(id, ServiceId.HvacOperatingState, 'ModeState');
-        if (opState === 'Heating') {
-            state.operatingState = 'heating';
-        }
-        else if (opState === 'Cooling') {
-            state.operatingState = 'cooling';
-        }
-        else {
-            state.operatingState = 'idle';
-        }
         const setpoint = this.resolveSetpoint(id, state.mode);
         if (setpoint !== undefined) {
             state.targetTemperature = toCelsius(setpoint, this.#temperatureUnit);
         }
+        state.operatingState = this.inferOperatingState(id, state);
+    }
+    /**
+     * Determine whether the thermostat is actively heating/cooling. Prefer the
+     * explicit `HVAC_OperatingState1.ModeState`; when the device doesn't report it,
+     * infer from the selected mode and setpoint vs current temperature so a heating
+     * thermostat isn't shown as OFF.
+     */
+    inferOperatingState(id, state) {
+        const opState = this.getVar(id, ServiceId.HvacOperatingState, 'ModeState');
+        if (opState === 'Heating') {
+            return 'heating';
+        }
+        if (opState === 'Cooling') {
+            return 'cooling';
+        }
+        if (opState !== undefined) {
+            return 'idle';
+        }
+        const { mode, currentTemperature: cur, targetTemperature: tgt } = state;
+        if (cur !== undefined && tgt !== undefined) {
+            if (mode === ThermostatMode.Heat && cur < tgt) {
+                return 'heating';
+            }
+            if (mode === ThermostatMode.Cool && cur > tgt) {
+                return 'cooling';
+            }
+        }
+        return 'idle';
     }
     /** Pick the relevant setpoint: the plain one if present, else heat/cool by mode. */
     resolveSetpoint(id, mode) {
@@ -489,14 +518,24 @@ export class LuupBackend extends TypedEmitter {
     }
     sleep(ms) {
         return new Promise((resolve) => {
-            const timer = setTimeout(resolve, ms);
-            this.#stopController.signal.addEventListener('abort', () => {
+            const signal = this.#stopController.signal;
+            if (signal.aborted) {
+                resolve();
+                return;
+            }
+            let timer;
+            const onAbort = () => {
                 clearTimeout(timer);
                 resolve();
-            }, { once: true });
+            };
+            timer = setTimeout(() => {
+                // Normal wake-up: detach the abort listener so it can't accumulate.
+                signal.removeEventListener('abort', onAbort);
+                resolve();
+            }, ms);
+            signal.addEventListener('abort', onAbort, { once: true });
         });
     }
 }
 /** Bare reference to the standard house-mode values for callers. */
 export { HouseMode };
-//# sourceMappingURL=luupBackend.js.map

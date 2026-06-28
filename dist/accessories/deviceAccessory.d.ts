@@ -29,5 +29,8 @@ export declare abstract class VeraDeviceAccessory extends AccessoryBase {
     updateState(patch: Partial<DeviceState>): void;
     /** Surface "Not Responding" in the Home app when the device is offline. */
     protected assertOnline(): void;
+    /** Cancel any pending work (timers) before this handler is dropped during a
+     * re-discovery. Overridden by accessories that schedule timers. */
+    dispose(): void;
     private updateBattery;
 }

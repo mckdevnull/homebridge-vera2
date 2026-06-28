@@ -32,4 +32,3 @@ export class TypedEmitter extends EventEmitter {
         return super.emit(event, ...args);
     }
 }
-//# sourceMappingURL=types.js.map

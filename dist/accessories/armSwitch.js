@@ -21,4 +21,3 @@ export class ArmSwitchAccessory extends VeraDeviceAccessory {
         this.service.updateCharacteristic(this.Characteristic.On, this.state.armed ?? false);
     }
 }
-//# sourceMappingURL=armSwitch.js.map

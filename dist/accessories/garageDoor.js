@@ -41,4 +41,3 @@ export class GarageDoorAccessory extends VeraDeviceAccessory {
         return this.state.on ? t.OPEN : t.CLOSED;
     }
 }
-//# sourceMappingURL=garageDoor.js.map

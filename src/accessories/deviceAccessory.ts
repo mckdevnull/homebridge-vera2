@@ -70,6 +70,10 @@ export abstract class VeraDeviceAccessory extends AccessoryBase {
     }
   }
 
+  /** Cancel any pending work (timers) before this handler is dropped during a
+   * re-discovery. Overridden by accessories that schedule timers. */
+  dispose(): void {}
+
   private updateBattery(): void {
     if (!this.batteryService) {
       return;

@@ -6,6 +6,7 @@ import { AccessoryBase } from './base.js';
 /** A Vera scene -> a momentary HomeKit Switch that runs the scene when turned on. */
 export class SceneAccessory extends AccessoryBase {
   private service!: Service;
+  private offTimer?: ReturnType<typeof setTimeout>;
 
   constructor(
     platform: VeraHomebridgePlatform,
@@ -28,8 +29,14 @@ export class SceneAccessory extends AccessoryBase {
           return;
         }
         await this.platform.backend.runScene(this.scene.id);
-        // Momentary: flip back off shortly after.
-        setTimeout(() => this.service.updateCharacteristic(this.Characteristic.On, false), 800);
+        // Momentary: flip back off shortly after (clear any prior pending timer).
+        if (this.offTimer) {
+          clearTimeout(this.offTimer);
+        }
+        this.offTimer = setTimeout(
+          () => this.service.updateCharacteristic(this.Characteristic.On, false),
+          800,
+        );
       });
   }
 }

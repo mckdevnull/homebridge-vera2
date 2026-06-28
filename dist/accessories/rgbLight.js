@@ -68,6 +68,12 @@ export class RgbLightAccessory extends VeraDeviceAccessory {
             this.service.updateCharacteristic(this.Characteristic.Saturation, this.state.saturation);
         }
     }
+    dispose() {
+        if (this.colorTimer) {
+            clearTimeout(this.colorTimer);
+            this.colorTimer = undefined;
+        }
+    }
     /** Coalesce the Hue+Saturation writes that the Home app sends back-to-back. */
     scheduleColor() {
         if (this.colorTimer) {
@@ -88,4 +94,3 @@ export class RgbLightAccessory extends VeraDeviceAccessory {
         await this.platform.backend.setColorRgb(this.id, rgb);
     }
 }
-//# sourceMappingURL=rgbLight.js.map

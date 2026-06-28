@@ -4,4 +4,3 @@ import { PLATFORM_NAME } from './settings.js';
 export default (api) => {
     api.registerPlatform(PLATFORM_NAME, VeraHomebridgePlatform);
 };
-//# sourceMappingURL=index.js.map

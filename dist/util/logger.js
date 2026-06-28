@@ -5,4 +5,3 @@ export const noopLogger = {
     warn: () => { },
     error: () => { },
 };
-//# sourceMappingURL=logger.js.map

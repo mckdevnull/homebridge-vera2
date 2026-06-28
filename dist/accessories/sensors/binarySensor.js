@@ -52,4 +52,3 @@ export class BinarySensorAccessory extends VeraDeviceAccessory {
         this.service.updateCharacteristic(this.Characteristic.StatusActive, this.state.online);
     }
 }
-//# sourceMappingURL=binarySensor.js.map

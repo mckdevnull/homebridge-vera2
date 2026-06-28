@@ -51,4 +51,3 @@ export function createDeviceAccessory(platform, accessory, device) {
 export function createArmSwitchAccessory(platform, accessory, device) {
     return new ArmSwitchAccessory(platform, accessory, device).init();
 }
-//# sourceMappingURL=factory.js.map

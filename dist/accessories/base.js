@@ -48,4 +48,3 @@ export class AccessoryBase {
         throw new this.hap.HapStatusError(-70402 /* this.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE */);
     }
 }
-//# sourceMappingURL=base.js.map

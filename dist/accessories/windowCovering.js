@@ -34,4 +34,3 @@ export class WindowCoveringAccessory extends VeraDeviceAccessory {
         this.service.updateCharacteristic(this.Characteristic.PositionState, this.Characteristic.PositionState.STOPPED);
     }
 }
-//# sourceMappingURL=windowCovering.js.map

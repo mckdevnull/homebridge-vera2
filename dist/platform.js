@@ -74,8 +74,14 @@ export class VeraHomebridgePlatform {
         });
         this.backend.on('houseMode', (mode) => this.houseModeHandler?.updateHouseMode(mode));
         this.backend.on('topologyChanged', () => {
-            if (this.started) {
+            if (!this.started) {
+                return;
+            }
+            try {
                 this.discoverDevices();
+            }
+            catch (err) {
+                this.log.error(`Failed to refresh accessories after a Vera topology change: ${err.message}`);
             }
         });
         this.backend.on('connection', (connected) => this.log.debug(`Vera connection ${connected ? 'established' : 'lost'}`));
@@ -85,27 +91,55 @@ export class VeraHomebridgePlatform {
     // Discovery / caching lifecycle
     // ---------------------------------------------------------------------------
     discoverDevices() {
+        // Cancel pending timers on the previous round's handlers before dropping them.
+        for (const handlers of this.deviceHandlers.values()) {
+            for (const handler of handlers) {
+                try {
+                    handler.dispose();
+                }
+                catch {
+                    /* ignore disposal errors */
+                }
+            }
+        }
         this.discoveredUuids.clear();
         this.deviceHandlers.clear();
         this.houseModeHandler = undefined;
+        // Each accessory is set up in isolation so one malformed device can't abort
+        // discovery of all the others.
         for (const device of this.backend.getDevices()) {
             if (!this.shouldInclude(device.id)) {
                 continue;
             }
-            this.setupDevice(device);
-            if (this.config.exposeArmDisarm && device.armable && isSensorKind(device.kind)) {
-                this.setupArmSwitch(device);
+            try {
+                this.setupDevice(device);
+                if (this.config.exposeArmDisarm && device.armable && isSensorKind(device.kind)) {
+                    this.setupArmSwitch(device);
+                }
+            }
+            catch (err) {
+                this.log.error(`Skipping device ${device.id} (${device.name}) — setup failed: ${err.message}`);
             }
         }
         if (!this.config.hideScenes) {
             for (const scene of this.backend.getScenes()) {
-                this.setupScene(scene);
+                try {
+                    this.setupScene(scene);
+                }
+                catch (err) {
+                    this.log.error(`Skipping scene ${scene.id} (${scene.name}) — setup failed: ${err.message}`);
+                }
             }
         }
         if (!this.config.hideHouseMode) {
             const mode = this.backend.getHouseMode();
             if (mode !== undefined) {
-                this.setupHouseMode(mode);
+                try {
+                    this.setupHouseMode(mode);
+                }
+                catch (err) {
+                    this.log.error(`House Mode accessory setup failed: ${err.message}`);
+                }
             }
         }
         this.pruneStale();
@@ -200,4 +234,3 @@ export class VeraHomebridgePlatform {
         return !excludeDeviceIds.includes(id);
     }
 }
-//# sourceMappingURL=platform.js.map
