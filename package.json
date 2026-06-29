@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "description": "Homebridge 2.0 dynamic platform plugin for Vera (MiCasaVerde / Ezlo) controllers over the local Luup HTTP API.",
   "license": "Apache-2.0",
+  "author": "mckdevnull",
   "type": "module",
   "main": "dist/index.js",
   "publishConfig": {

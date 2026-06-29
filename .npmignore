@@ -8,4 +8,3 @@ tsconfig.json
 vitest.config.ts
 eslint.config.*
 .gitignore
-DESIGN.md

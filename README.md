@@ -542,7 +542,7 @@ npm test
 npm run test:coverage
 ```
 
-For the architecture and design rationale (including the Vera Luup API reference and how an Ezlo backend could be added later), see [DESIGN.md on GitHub](https://github.com/mckdevnull/homebridge-vera2/blob/main/DESIGN.md).
+The codebase is layered so the HomeKit accessory code never depends on Vera/Luup specifics: a pluggable backend (`src/vera/`) talks to the controller and exposes a normalised device model, which the platform and accessories (`src/accessories/`) map to HomeKit.
 
 ---
 
